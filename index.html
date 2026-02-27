@@ -3,23 +3,175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>������ ���� �˾� ���̺�</title>
+    <title>더현대 서울 팝업 라이브</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; -webkit-tap-highlight-color: transparent; }
-        /* ���� ĳ���� ���� */
-        .carousel { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -ms-overflow-style: none; scrollbar-width: none; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        
+        /* 가로 캐러셀 설정 */
+        .carousel { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -ms-overflow-style: none; scrollbar-width: none; padding-bottom: 10px; }
         .carousel::-webkit-scrollbar { display: none; }
         .card { flex: 0 0 82%; scroll-snap-align: center; margin-right: 16px; transition: all 0.3s; }
         @media (min-width: 768px) { .card { flex: 0 0 320px; } }
         
-        /* ���� ��Ÿ�� */
+        /* 상태별 배지 스타일 */
         .tag-live { background: #ef4444; color: #fff; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; animation: pulse 2s infinite; }
         .tag-upcoming { background: #3b82f6; color: #fff; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; }
         .tag-ended { background: #94a3b8; color: #fff; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; }
         
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
         
+        /* 내비게이션 활성화 */
         .active-floor { color: #059669 !important; border-bottom: 3px solid #059669; }
-        .scroll-mt-
+        .scroll-mt-header { scroll-margin-top: 100px; }
+    </style>
+</head>
+<body class="pb-24">
+
+    <header class="p-6 bg-white sticky top-0 z-20 shadow-sm flex justify-between items-center">
+        <div>
+            <h1 class="text-xl font-black tracking-tighter text-gray-900 leading-none">THE HYUNDAI <span class="text-emerald-600">POP-UP</span></h1>
+            <p id="today-display" class="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-wider"></p>
+        </div>
+        <div class="bg-gray-100 px-3 py-1 rounded-full text-[10px] font-bold text-gray-500 italic">AUTOMATED</div>
+    </header>
+
+    <main id="app" class="p-4 space-y-12">
+        <div id="loading" class="py-20 text-center text-gray-400 font-medium italic">데이터를 연결하는 중입니다...</div>
+    </main>
+
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around items-center h-16 z-30 px-4">
+        <a href="#B2" class="floor-link text-gray-300 text-sm font-black py-2">B2</a>
+        <a href="#1F" class="floor-link text-gray-300 text-sm font-black py-2">1F</a>
+        <a href="#3F" class="floor-link text-gray-300 text-sm font-black py-2">3F</a>
+        <a href="#5F" class="floor-link text-gray-300 text-sm font-black py-2">5F</a>
+        <a href="#6F" class="floor-link text-gray-300 text-sm font-black py-2">6F</a>
+    </nav>
+
+    <script>
+        // 1. 엑셀 연동 설정 (보내주신 리소스 ID 반영)
+        const excelUrl = "https://onedrive.live.com/download?resid=6DC17DD437B292AF!205844&authkey=!AAL-v6OYWyn-ER4";
+
+        async function init() {
+            // 오늘 날짜 업데이트
+            const now = new Date();
+            document.getElementById('today-display').innerText = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+
+            try {
+                const response = await fetch(excelUrl);
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const csvData = await response.text();
+                // 쉼표(,) 또는 탭(\t) 구분자 대응을 위해 정규식 분할 사용 가능
+                const rows = csvData.split(/\r?\n/).slice(1); 
+                
+                const layers = { "B2": [], "1F": [], "3F": [], "5F": [], "6F": [] };
+
+                rows.forEach(row => {
+                    const columns = row.split(','); // 엑셀에서 CSV로 불러올 때 기준
+                    if (columns.length < 5) return;
+
+                    // 데이터 매핑: 0:층, 1:장소, 2:이름, 3:시작일, 4:종료일, 5:이미지URL
+                    const [floor, space, name, start, end, img] = columns.map(c => c.trim().replace(/"/g, ''));
+                    
+                    const startDate = new Date(start);
+                    const endDate = new Date(end);
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    
+                    let status = "";
+                    let dDay = "";
+                    let tagClass = "";
+
+                    // 오늘 날짜 기준 상태 자동 계산
+                    if (today < startDate) {
+                        status = "오픈 예정";
+                        tagClass = "tag-upcoming";
+                        const diff = Math.ceil((startDate - today) / (1000 * 60 * 60 * 24));
+                        dDay = `D-${diff}`;
+                    } else if (today >= startDate && today <= endDate) {
+                        status = "진행 중";
+                        tagClass = "tag-live";
+                        const diff = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+                        dDay = diff === 0 ? "TODAY END" : `${diff}일 남음`;
+                    } else {
+                        status = "종료됨";
+                        tagClass = "tag-ended";
+                        dDay = "ENDED";
+                    }
+
+                    const period = `${start.slice(5).replace('-','.')} - ${end.slice(5).replace('-','.')}`;
+
+                    if (layers[floor]) {
+                        layers[floor].push({ space, name, period, status, dDay, tagClass, img });
+                    }
+                });
+
+                render(layers);
+            } catch (e) {
+                document.getElementById('loading').innerHTML = `데이터를 가져올 수 없습니다.<br><span class="text-xs font-normal">엑셀 공유 설정이나 파일 형식을 확인해주세요.</span>`;
+                console.error("Excel Fetch Error:", e);
+            }
+        }
+
+        function render(layers) {
+            const app = document.getElementById('app');
+            app.innerHTML = '';
+
+            Object.keys(layers).forEach(floor => {
+                if (layers[floor].length === 0) return;
+
+                const section = document.createElement('section');
+                section.id = floor;
+                section.className = "scroll-mt-header";
+                section.innerHTML = `
+                    <div class="flex justify-between items-end mb-4 px-2">
+                        <h2 class="text-4xl font-black tracking-tighter text-gray-900">${floor}</h2>
+                        <span class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">${layers[floor][0].space || 'POP-UP ZONE'}</span>
+                    </div>
+                    <div class="carousel px-2">
+                        ${layers[floor].map(item => `
+                            <div class="card bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-gray-100 ${item.status === '종료됨' ? 'grayscale opacity-60' : ''}">
+                                <div class="relative h-[420px] bg-gray-200">
+                                    <img src="${item.img || 'https://via.placeholder.com/400x600?text=The+Hyundai+Seoul'}" 
+                                         class="w-full h-full object-cover" 
+                                         onerror="this.src='https://via.placeholder.com/400x600?text=Image+Preparing'">
+                                    <div class="absolute top-5 left-5 flex flex-col gap-2">
+                                        <span class="${item.tagClass}">${item.status}</span>
+                                        <span class="bg-white/90 backdrop-blur text-black px-3 py-1 rounded-full text-[10px] font-black shadow-sm text-center">${item.dDay}</span>
+                                    </div>
+                                </div>
+                                <div class="p-6">
+                                    <h3 class="font-bold text-xl leading-tight mb-2 tracking-tight text-gray-800">${item.name}</h3>
+                                    <div class="flex items-center gap-2">
+                                        <svg class="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                        <p class="text-gray-400 text-xs font-bold tracking-tight">${item.period}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                app.appendChild(section);
+            });
+
+            // 내비게이션 하이라이트 제어
+            const links = document.querySelectorAll('.floor-link');
+            window.addEventListener('scroll', () => {
+                let current = "";
+                document.querySelectorAll('section').forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (pageYOffset >= sectionTop - 200) current = section.getAttribute('id');
+                });
+                links.forEach(link => {
+                    link.classList.remove('active-floor');
+                    if (link.getAttribute('href').includes(current)) link.classList.add('active-floor');
+                });
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
