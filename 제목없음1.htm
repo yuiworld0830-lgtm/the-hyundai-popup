@@ -1,0 +1,35 @@
+// 구글 시트 '웹에 게시'에서 복사한 CSV URL을 여기에 넣으세요                                                                         
+const sheetURL = "여기에_복사한_CSV_URL을_넣으세요";                                                                                  
+                                                                                                                                      
+async function fetchPopups() {                                                                                                        
+    const response = await fetch(sheetURL);                                                                                           
+    const data = await response.text();                                                                                               
+    const rows = data.split('\n').slice(1); // 헤더 제외                                                                              
+                                                                                                                                      
+    // 층별로 데이터 분류                                                                                                             
+    const layers = { "B2": [], "1F": [], "3F": [], "5F": [] };                                                                        
+                                                                                                                                      
+    rows.forEach(row => {                                                                                                             
+        const [floor, space, name, date, status, img] = row.split(',');                                                               
+        if(layers[floor]) {                                                                                                           
+            layers[floor].push({ space, name, date, status, img });                                                                   
+        }                                                                                                                             
+    });                                                                                                                               
+                                                                                                                                      
+    // 화면에 렌더링                                                                                                                  
+    Object.keys(layers).forEach(floor => {                                                                                            
+        const container = document.querySelector(`#${floor} .carousel-container`);                                                    
+        if(!container) return;                                                                                                        
+                                                                                                                                      
+        container.innerHTML = layers[floor].map(item => `                                                                             
+            <div class="min-w-[300px] ${item.status === '진행중' ? 'current-popup p-2 bg-white shadow-xl' : 'opacity-60'} rounded-xl">
+                <img src="${item.img}" class="rounded-lg mb-2 w-full h-64 object-cover">                                              
+                <p class="text-xs text-gray-400">${item.space}</p>                                                                    
+                <p class="font-bold">${item.name}</p>                                                                                 
+                <p class="text-sm text-gray-500">${item.date}</p>                                                                     
+            </div>                                                                                                                    
+        `).join('');                                                                                                                  
+    });                                                                                                                               
+}                                                                                                                                     
+                                                                                                                                      
+fetchPopups();                                                                                                                        
