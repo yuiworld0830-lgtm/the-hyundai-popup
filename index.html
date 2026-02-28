@@ -3,30 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>더현대 서울 팝업 라이브</title>
+    <title>지금, 더현대 서울</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         .hide-scroll::-webkit-scrollbar { display: none; }
+        /* 부드러운 스크롤 이동을 위한 설정 */
+        html { scroll-behavior: smooth; }
+        .carousel { scroll-behavior: smooth; }
     </style>
 </head>
-<body class="bg-gray-50 pb-20">
+<body class="bg-gray-50 flex">
     
-    <header class="p-6 bg-white shadow-sm flex justify-between items-center sticky top-0 z-50">
-        <h1 class="text-xl font-black italic tracking-tighter text-gray-900">THE HYUNDAI <span class="text-emerald-600">POP-UP</span></h1>
-        <div id="status-dot" class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
-    </header>
+    <nav class="fixed left-0 top-0 h-full w-16 bg-white border-r border-gray-200 flex flex-col items-center pt-28 space-y-8 z-40 shadow-sm">
+        <a href="#B2" class="font-black text-gray-400 hover:text-emerald-600 transition-colors">B2</a>
+        <a href="#1F" class="font-black text-gray-400 hover:text-emerald-600 transition-colors">1F</a>
+        <a href="#5F" class="font-black text-gray-400 hover:text-emerald-600 transition-colors">5F</a>
+        <a href="#6F" class="font-black text-gray-400 hover:text-emerald-600 transition-colors">6F</a>
+    </nav>
 
-    <main id="app" class="p-4 space-y-10">
-        <div id="msg" class="py-20 text-center text-gray-500 font-bold animate-pulse">데이터를 읽는 중입니다...</div>
-    </main>
+    <div class="ml-16 w-full pb-20">
+        <header class="p-6 bg-white/90 backdrop-blur shadow-sm flex justify-between items-center sticky top-0 z-30">
+            <h1 class="text-2xl font-black italic tracking-tighter text-gray-900">지금, <span class="text-emerald-600">더현대 서울</span></h1>
+            <div id="status-dot" class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+        </header>
+
+        <main id="app" class="p-4 space-y-12 mt-4">
+            <div id="msg" class="py-20 text-center text-gray-500 font-bold animate-pulse">데이터를 읽는 중입니다...</div>
+        </main>
+    </div>
 
     <script>
         const app = document.getElementById('app');
         const msg = document.getElementById('msg');
         const dot = document.getElementById('status-dot');
 
-        // 외부 링크 대신, 같은 깃허브에 올린 data.csv 파일을 바로 읽어옵니다.
         Papa.parse("data.csv", {
             download: true,
             header: true,
@@ -35,13 +46,30 @@
                 const layers = { "B2": [], "1F": [], "5F": [], "6F": [] };
                 let hasData = false;
 
+                // 오늘 날짜 (시간 제외)
+                const now = new Date();
+                now.setHours(0,0,0,0);
+
                 data.forEach(item => {
                     const floor = String(item['층'] || '').trim().toUpperCase();
-                    // 빈 줄 제외하고 데이터가 있는 경우만 추가
-                    if(floor && layers[floor]) {
-                        layers[floor].push(item);
-                        hasData = true;
+                    if(!floor || !layers[floor]) return;
+
+                    // 날짜 계산
+                    const start = new Date(item['시작일']);
+                    const end = new Date(item['종료일']);
+                    
+                    let statusObj = { text: '진행중', color: 'bg-emerald-500', class: 'status-ongoing', opacity: '' };
+
+                    if (now > end) {
+                        statusObj = { text: '종료됨', color: 'bg-gray-400', class: 'status-past', opacity: 'opacity-60 grayscale' };
+                    } else if (now < start) {
+                        statusObj = { text: '오픈예정', color: 'bg-blue-500', class: 'status-upcoming', opacity: '' };
                     }
+
+                    item._start = start;
+                    item._status = statusObj;
+                    layers[floor].push(item);
+                    hasData = true;
                 });
 
                 if(!hasData) {
@@ -53,19 +81,28 @@
                 
                 Object.keys(layers).forEach(floor => {
                     if(layers[floor].length === 0) return;
+
+                    // 1. 날짜 순으로 정렬 (과거 -> 진행중 -> 미래 순서)
+                    layers[floor].sort((a, b) => a._start - b._start);
                     
                     const section = document.createElement('section');
+                    // 메뉴 클릭 시 상단 헤더에 가리지 않도록 여백 조정
+                    section.id = floor;
+                    section.className = "scroll-mt-24"; 
+                    
                     section.innerHTML = `
-                        <h2 class="text-3xl font-black mb-4 px-2 italic text-gray-900">${floor}</h2>
-                        <div class="flex overflow-x-auto snap-x snap-mandatory gap-4 px-2 pb-4 hide-scroll" style="scrollbar-width: none;">
+                        <h2 class="text-4xl font-black mb-4 px-2 italic text-gray-900 tracking-tighter">${floor}</h2>
+                        <div class="carousel flex overflow-x-auto snap-x snap-mandatory gap-4 px-2 pb-6 hide-scroll relative">
                             ${layers[floor].map(item => `
-                                <div class="snap-center shrink-0 w-[85%] md:w-[320px] bg-white rounded-3xl shadow-md border border-gray-100 overflow-hidden">
+                                <div class="card ${item._status.class} ${item._status.opacity} snap-center shrink-0 w-[85%] md:w-[320px] bg-white rounded-3xl shadow-md border border-gray-100 overflow-hidden transition-all">
                                     <div class="relative h-80 bg-gray-200">
                                         <img src="${item['이미지URL']}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/400x600?text=THE+HYUNDAI'">
-                                        <div class="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-lg text-xs font-black tracking-widest shadow-md">LIVE</div>
+                                        <div class="absolute top-4 left-4 ${item._status.color} text-white px-3 py-1 rounded-lg text-xs font-black tracking-widest shadow-md">
+                                            ${item._status.text}
+                                        </div>
                                     </div>
                                     <div class="p-6">
-                                        <h3 class="text-xl font-bold mb-1 text-gray-900">${item['팝업이름'] || '이름 없음'}</h3>
+                                        <h3 class="text-xl font-bold mb-1 text-gray-900 leading-tight">${item['팝업이름'] || '이름 없음'}</h3>
                                         <p class="text-sm font-semibold text-gray-500">${item['공간명'] || ''} | ${item['시작일'] || ''}~${item['종료일'] || ''}</p>
                                     </div>
                                 </div>
@@ -74,9 +111,22 @@
                     app.appendChild(section);
                 });
 
-                // 성공 시 초록색 불 켜기
+                // 성공 상태 표시
                 dot.classList.replace('bg-red-500', 'bg-green-500');
                 dot.classList.remove('animate-pulse');
+
+                // 2. 렌더링 후, 각 층별로 '진행중'인 첫 번째 팝업으로 자동 스크롤
+                setTimeout(() => {
+                    document.querySelectorAll('.carousel').forEach(carousel => {
+                        const firstOngoing = carousel.querySelector('.status-ongoing');
+                        if (firstOngoing) {
+                            // 모바일 등에서 화면 중앙에 오도록 스크롤 위치 계산
+                            const scrollPosition = firstOngoing.offsetLeft - (carousel.clientWidth / 2) + (firstOngoing.clientWidth / 2);
+                            carousel.scrollLeft = scrollPosition;
+                        }
+                    });
+                }, 100); // UI가 그려질 시간을 잠깐 줌
+                
             },
             error: function(err) {
                 msg.innerHTML = "데이터를 찾을 수 없습니다.<br>깃허브에 <b>data.csv</b> 파일이 정확히 올라갔는지 확인해 주세요.";
