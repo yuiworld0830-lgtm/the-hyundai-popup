@@ -5,110 +5,125 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>더현대 서울 팝업 라이브</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; background-color: #f8f9fa; -webkit-tap-highlight-color: transparent; }
-        .carousel { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -ms-overflow-style: none; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; -webkit-tap-highlight-color: transparent; }
+        /* 가로 스크롤 캐러셀 */
+        .carousel { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -ms-overflow-style: none; scrollbar-width: none; }
         .carousel::-webkit-scrollbar { display: none; }
-        .card { flex: 0 0 85%; scroll-snap-align: center; margin-right: 16px; background: white; border-radius: 24px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .card { flex: 0 0 82%; scroll-snap-align: center; margin-right: 16px; transition: all 0.3s; }
         @media (min-width: 768px) { .card { flex: 0 0 320px; } }
-        .tag { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 800; }
-        .tag-live { background: #ef4444; color: white; animation: pulse 2s infinite; }
-        .tag-upcoming { background: #3b82f6; color: white; }
-        .tag-ended { background: #94a3b8; color: white; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        
+        /* 배지 스타일 */
+        .tag-live { background: #ef4444; color: #fff; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; animation: pulse 2s infinite; }
+        .tag-upcoming { background: #3b82f6; color: #fff; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; }
+        .tag-ended { background: #94a3b8; color: #fff; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; }
+        
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        
         .active-floor { color: #059669 !important; border-bottom: 3px solid #059669; }
+        .scroll-mt-header { scroll-margin-top: 100px; }
     </style>
 </head>
 <body class="pb-24">
 
     <header class="p-6 bg-white sticky top-0 z-20 shadow-sm flex justify-between items-center">
-        <h1 class="text-xl font-black italic">THE HYUNDAI <span class="text-emerald-600">POP-UP</span></h1>
-        <div id="status-dot" class="w-2 h-2 rounded-full bg-gray-300"></div>
+        <div>
+            <h1 class="text-xl font-black tracking-tighter text-gray-900 leading-none italic">THE HYUNDAI <span class="text-emerald-600">POP-UP</span></h1>
+            <p id="today-display" class="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-wider"></p>
+        </div>
+        <div id="connection-status" class="w-2 h-2 rounded-full bg-gray-300"></div>
     </header>
 
     <main id="app" class="p-4 space-y-12">
-        <div id="loading" class="py-20 text-center text-gray-400 font-medium italic">데이터를 불러오는 중입니다...</div>
+        <div id="loading" class="py-20 text-center text-gray-400 font-medium italic">데이터를 연결 중입니다...</div>
     </main>
 
-    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around items-center h-16 z-30 px-4">
-        <a href="#B2" class="floor-link text-gray-400 text-sm font-black">B2</a>
-        <a href="#1F" class="floor-link text-gray-400 text-sm font-black">1F</a>
-        <a href="#5F" class="floor-link text-gray-400 text-sm font-black">5F</a>
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around items-center h-16 z-30 px-4">
+        <a href="#B2" class="floor-link text-gray-400 text-sm font-black py-2">B2</a>
+        <a href="#1F" class="floor-link text-gray-400 text-sm font-black py-2">1F</a>
+        <a href="#3F" class="floor-link text-gray-400 text-sm font-black py-2">3F</a>
+        <a href="#5F" class="floor-link text-gray-400 text-sm font-black py-2">5F</a>
+        <a href="#6F" class="floor-link text-gray-400 text-sm font-black py-2">6F</a>
     </nav>
 
     <script>
-        const excelUrl = "https://onedrive.live.com/download?resid=6DC17DD437B292AF!205844&authkey=!AAL-v6OYWyn-ER4";
+        // 1. 사용자님이 주신 1번 링크를 변환한 직접 다운로드 주소입니다.
+        const excelUrl = "https://onedrive.live.com/download?resid=6DC17DD437B292AF!205844&authkey=!AYPG8aGGNLIopSpvsl8_gEI";
 
         async function init() {
+            const now = new Date();
+            now.setHours(0,0,0,0); // 시간 제외 날짜만 계산
+            document.getElementById('today-display').innerText = now.toLocaleDateString();
+
             try {
                 const response = await fetch(excelUrl);
-                const data = await response.text();
-                // 쉼표(,)나 탭(\t) 모두 대응하는 정규식 분할
-                const rows = data.split(/\r?\n/).filter(row => row.trim() !== "").slice(1);
-                const layers = { "B2": [], "1F": [], "5F": [] };
-                const now = new Date(); now.setHours(0,0,0,0);
+                const csvData = await response.text();
+                
+                // 엑셀 행 분리 (첫 줄 헤더 제외)
+                const rows = csvData.split(/\r?\n/).slice(1);
+                const layers = { "B2": [], "1F": [], "3F": [], "5F": [], "6F": [] };
 
                 rows.forEach(row => {
-                    // 구분자가 탭일 경우와 쉼표일 경우를 모두 체크
-                    const columns = row.includes('\t') ? row.split('\t') : row.split(',');
-                    if (columns.length < 5) return;
+                    // 쉼표로 열 분리 (따옴표 안의 쉼표 무시하는 정규식)
+                    const columns = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+                    if (!columns || columns.length < 5) return;
 
+                    // 엑셀 순서: 0:층, 1:장소, 2:이름, 3:시작일, 4:종료일, 5:이미지URL
                     const [floor, space, name, start, end, img] = columns.map(c => c.trim().replace(/"/g, ''));
-                    const sDate = new Date(start);
-                    const eDate = new Date(end);
+                    
+                    const startDate = new Date(start);
+                    const endDate = new Date(end);
                     
                     let status = "종료됨", dDay = "ENDED", tagClass = "tag-ended";
-                    if (now < sDate) {
-                        status = "오픈 예정"; tagClass = "tag-upcoming";
-                        dDay = `D-${Math.ceil((sDate - now) / 86400000)}`;
-                    } else if (now <= eDate) {
-                        status = "진행 중"; tagClass = "tag-live";
-                        const diff = Math.ceil((eDate - now) / 86400000);
-                        dDay = diff === 0 ? "TODAY END" : `${diff}일 남음`;
+
+                    if (now < startDate) {
+                        status = "오픈 예정";
+                        tagClass = "tag-upcoming";
+                        const diff = Math.ceil((startDate - now) / 86400000);
+                        dDay = `D-${diff}`;
+                    } else if (now >= startDate && now <= endDate) {
+                        status = "진행 중";
+                        tagClass = "tag-live";
+                        const diff = Math.ceil((endDate - now) / 86400000);
+                        dDay = diff === 0 ? "오늘 종료" : `${diff}일 남음`;
                     }
 
                     if (layers[floor]) {
-                        layers[floor].push({ space, name, period: `${start}~${end}`, status, dDay, tagClass, img });
+                        layers[floor].push({ space, name, period: `${start.slice(5)} ~ ${end.slice(5)}`, status, dDay, tagClass, img });
                     }
                 });
 
-                document.getElementById('status-dot').classList.replace('bg-gray-300', 'bg-green-500');
+                document.getElementById('connection-status').classList.replace('bg-gray-300', 'bg-green-500');
                 render(layers);
             } catch (e) {
-                document.getElementById('loading').innerText = "데이터 연결 실패. 공유 설정을 확인해주세요.";
-                document.getElementById('status-dot').classList.replace('bg-gray-300', 'bg-red-500');
+                document.getElementById('loading').innerText = "엑셀 연결 실패. 파일 형식을 확인하세요.";
+                document.getElementById('connection-status').classList.replace('bg-gray-300', 'bg-red-500');
             }
         }
 
         function render(layers) {
-            const app = document.getElementById('app'); app.innerHTML = '';
+            const app = document.getElementById('app');
+            app.innerHTML = '';
+
             Object.keys(layers).forEach(floor => {
                 if (layers[floor].length === 0) return;
+
                 const section = document.createElement('section');
                 section.id = floor;
+                section.className = "scroll-mt-header";
                 section.innerHTML = `
-                    <h2 class="text-3xl font-black mb-4 px-2 italic uppercase">${floor}</h2>
+                    <h2 class="text-4xl font-black mb-4 px-2 tracking-tighter text-gray-900 uppercase italic">${floor}</h2>
                     <div class="carousel px-2">
                         ${layers[floor].map(item => `
-                            <div class="card ${item.status === '종료됨' ? 'grayscale opacity-60' : ''}">
-                                <div class="relative h-[400px] bg-gray-100">
-                                    <img src="${item.img}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/400x600?text=THE+HYUNDAI'">
-                                    <div class="absolute top-4 left-4 flex flex-col gap-2 font-black">
-                                        <span class="tag ${item.tagClass}">${item.status}</span>
-                                        <span class="bg-white/90 text-[10px] px-2 py-1 rounded shadow-sm text-center">${item.dDay}</span>
+                            <div class="card bg-white rounded-[2.5rem] border border-gray-100 overflow-hidden shadow-sm ${item.status === '종료됨' ? 'grayscale opacity-60' : ''}">
+                                <div class="relative h-[420px] bg-gray-200">
+                                    <img src="${item.img || ''}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/400x600?text=THE+HYUNDAI+SEOUL'">
+                                    <div class="absolute top-5 left-5 flex flex-col gap-2">
+                                        <span class="${item.tagClass}">${item.status}</span>
+                                        <span class="bg-white/90 backdrop-blur px-2 py-1 rounded text-[10px] font-black shadow-sm text-center">${item.dDay}</span>
                                     </div>
                                 </div>
-                                <div class="p-5">
-                                    <h3 class="font-bold text-xl mb-1 text-gray-900">${item.name}</h3>
-                                    <p class="text-gray-400 text-[11px] font-bold uppercase tracking-tighter">${item.space} | ${item.period}</p>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>`;
-                app.appendChild(section);
-            });
-        }
-        init();
-    </script>
-</body>
-</html>
+                                <div class="p-6">
+                                    <h3 class="font-bold text-xl mb-1 text-gray-800 leading-tight">${item.name}</h3>
+                                    <p class="text-gray-400 text-[11px] font-bold uppercase tracking-tight">${item.space} | ${item.period}</p>
