@@ -17,7 +17,6 @@
         .tag-upcoming { background: #3b82f6; color: #fff; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; }
         .tag-ended { background: #94a3b8; color: #fff; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-        .active-floor { color: #059669 !important; border-bottom: 3px solid #059669; }
     </style>
 </head>
 <body class="pb-24">
@@ -31,102 +30,56 @@
     </header>
 
     <main id="app" class="p-4 space-y-12">
-        <div id="loading" class="py-20 text-center text-gray-400 font-medium italic">데이터를 연결 중입니다...</div>
+        <div id="loading" class="py-20 text-center text-gray-400 font-medium italic">데이터를 불러오는 중...</div>
     </main>
 
     <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around items-center h-16 z-30 px-4">
-        <a href="#B2" class="floor-link text-gray-400 text-sm font-black py-2">B2</a>
-        <a href="#1F" class="floor-link text-gray-400 text-sm font-black py-2">1F</a>
-        <a href="#5F" class="floor-link text-gray-400 text-sm font-black py-2">5F</a>
+        <a href="#B2" class="text-gray-400 text-sm font-black py-2">B2</a>
+        <a href="#1F" class="text-gray-400 text-sm font-black py-2">1F</a>
+        <a href="#5F" class="text-gray-400 text-sm font-black py-2">5F</a>
     </nav>
 
     <script>
         const excelUrl = "https://onedrive.live.com/download?resid=6DC17DD437B292AF!205844&authkey=!AYPG8aGGNLIopSpvsl8_gEI";
+
+        // 날짜를 안전하게 변환하는 함수
+        function parseDate(val) {
+            if (!val) return new Date();
+            // 엑셀 시리얼 숫자일 경우 처리
+            if (typeof val === 'number') {
+                return new Date((val - 25569) * 86400000);
+            }
+            return new Date(val);
+        }
 
         async function init() {
             const now = new Date(); now.setHours(0,0,0,0);
             document.getElementById('today-display').innerText = now.toLocaleDateString();
 
             try {
-                // 1. 엑셀 파일 가져오기
                 const response = await fetch(excelUrl);
                 const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet);
                 
-                // 2. 엑셀 데이터 파싱
-                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
-                
-                // 3. 데이터를 JSON 형식으로 변환 (헤더 기준)
-                const jsonData = XLSX.utils.sheet_to_json(worksheet);
                 const layers = { "B2": [], "1F": [], "5F": [] };
 
                 jsonData.forEach(item => {
-                    // 엑셀 헤더 이름: 층, 공간명, 팝업이름, 시작일, 종료일, 이미지URL
                     const floor = String(item['층'] || '').trim();
-                    const startDate = new Date(item['시작일']);
-                    const endDate = new Date(item['종료일']);
+                    const sDate = parseDate(item['시작일']);
+                    const eDate = parseDate(item['종료일']);
                     
                     let status = "종료됨", dDay = "ENDED", tagClass = "tag-ended";
 
-                    if (now < startDate) {
+                    if (now < sDate) {
                         status = "오픈 예정"; tagClass = "tag-upcoming";
-                        dDay = `D-${Math.ceil((startDate - now) / 86400000)}`;
-                    } else if (now <= endDate) {
+                        dDay = `D-${Math.ceil((sDate - now) / 86400000)}`;
+                    } else if (now <= eDate) {
                         status = "진행 중"; tagClass = "tag-live";
-                        const diff = Math.ceil((endDate - now) / 86400000);
+                        const diff = Math.ceil((eDate - now) / 86400000);
                         dDay = diff === 0 ? "오늘 종료" : `${diff}일 남음`;
                     }
 
                     if (layers[floor]) {
-                        layers[floor].push({ 
-                            space: item['공간명'], 
-                            name: item['팝업이름'], 
-                            period: `${String(item['시작일']).slice(5)} ~ ${String(item['종료일']).slice(5)}`, 
-                            status, dDay, tagClass, 
-                            img: item['이미지URL'] 
-                        });
-                    }
-                });
-
-                document.getElementById('connection-status').classList.replace('bg-gray-300', 'bg-green-500');
-                render(layers);
-            } catch (e) {
-                console.error(e);
-                document.getElementById('loading').innerText = "데이터 읽기 실패. 엑셀 파일의 첫 줄(헤더)이 '층, 공간명, 팝업이름...'인지 확인해 주세요.";
-                document.getElementById('connection-status').classList.replace('bg-gray-300', 'bg-red-500');
-            }
-        }
-
-        function render(layers) {
-            const app = document.getElementById('app'); app.innerHTML = '';
-            Object.keys(layers).forEach(floor => {
-                if (layers[floor].length === 0) return;
-                const section = document.createElement('section');
-                section.id = floor;
-                section.innerHTML = `
-                    <h2 class="text-4xl font-black mb-4 px-2 tracking-tighter italic uppercase">${floor}</h2>
-                    <div class="carousel px-2">
-                        ${layers[floor].map(item => `
-                            <div class="card bg-white rounded-[2.5rem] border overflow-hidden shadow-sm ${item.status === '종료됨' ? 'grayscale opacity-60' : ''}">
-                                <div class="relative h-[420px] bg-gray-100">
-                                    <img src="${item.img}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/400x600?text=THE+HYUNDAI'">
-                                    <div class="absolute top-5 left-5 flex flex-col gap-2">
-                                        <span class="${item.tagClass}">${item.status}</span>
-                                        <span class="bg-white/90 px-2 py-1 rounded text-[10px] font-black shadow-sm text-center">${item.dDay}</span>
-                                    </div>
-                                </div>
-                                <div class="p-6">
-                                    <h3 class="font-bold text-xl mb-1 text-gray-800">${item.name}</h3>
-                                    <p class="text-gray-400 text-[11px] font-bold uppercase">${item.space} | ${item.period}</p>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>`;
-                app.appendChild(section);
-            });
-        }
-        init();
-    </script>
-</body>
-</html>
+                        layers[floor].push({
