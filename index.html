@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>더현대 서울 팝업 라이브</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        .hide-scroll::-webkit-scrollbar { display: none; }
+    </style>
 </head>
 <body class="bg-gray-50 pb-20">
     
@@ -15,57 +18,51 @@
     </header>
 
     <main id="app" class="p-4 space-y-10">
-        <div id="msg" class="py-20 text-center text-gray-500 font-bold">
-            데이터 우회 연결 중입니다...<br>
-            <span class="text-xs font-normal mt-2 block text-gray-400">(최대 10~15초 정도 소요될 수 있습니다)</span>
-        </div>
+        <div id="msg" class="py-20 text-center text-gray-500 font-bold animate-pulse">데이터를 읽는 중입니다...</div>
     </main>
 
     <script>
-        // 원드라이브 원본 주소
-        const originalUrl = "https://onedrive.live.com/download?resid=6DC17DD437B292AF!205844&authkey=!AYPG8aGGNLIopSpvsl8_gEI";
-        
-        // 원드라이브 보안 차단을 뚫기 위한 우회 주소 (Proxy) 적용
-        const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(originalUrl);
+        const app = document.getElementById('app');
+        const msg = document.getElementById('msg');
+        const dot = document.getElementById('status-dot');
 
-        async function loadData() {
-            const app = document.getElementById('app');
-            const msg = document.getElementById('msg');
-            const dot = document.getElementById('status-dot');
-
-            try {
-                // 우회 주소로 데이터 요청
-                const res = await fetch(proxyUrl);
-                if(!res.ok) throw new Error("네트워크 응답 오류");
-                
-                const arrayBuffer = await res.arrayBuffer();
-                const wb = XLSX.read(arrayBuffer, { type: 'array' });
-                const firstSheet = wb.Sheets[wb.SheetNames[0]];
-                const data = XLSX.utils.sheet_to_json(firstSheet);
-
+        // 외부 링크 대신, 같은 깃허브에 올린 data.csv 파일을 바로 읽어옵니다.
+        Papa.parse("data.csv", {
+            download: true,
+            header: true,
+            complete: function(results) {
+                const data = results.data;
                 const layers = { "B2": [], "1F": [], "5F": [], "6F": [] };
-                
-                data.forEach(item => {
-                    const floor = String(item['층'] || '').trim().toUpperCase();
-                    if(layers[floor]) layers[floor].push(item);
-                });
-
-                app.innerHTML = '';
                 let hasData = false;
 
+                data.forEach(item => {
+                    const floor = String(item['층'] || '').trim().toUpperCase();
+                    // 빈 줄 제외하고 데이터가 있는 경우만 추가
+                    if(floor && layers[floor]) {
+                        layers[floor].push(item);
+                        hasData = true;
+                    }
+                });
+
+                if(!hasData) {
+                    msg.innerText = "데이터가 없습니다. data.csv 파일 내용을 확인해주세요.";
+                    return;
+                }
+
+                app.innerHTML = '';
+                
                 Object.keys(layers).forEach(floor => {
                     if(layers[floor].length === 0) return;
-                    hasData = true;
                     
                     const section = document.createElement('section');
                     section.innerHTML = `
                         <h2 class="text-3xl font-black mb-4 px-2 italic text-gray-900">${floor}</h2>
-                        <div class="flex overflow-x-auto snap-x snap-mandatory gap-4 px-2 pb-4" style="scrollbar-width: none;">
+                        <div class="flex overflow-x-auto snap-x snap-mandatory gap-4 px-2 pb-4 hide-scroll" style="scrollbar-width: none;">
                             ${layers[floor].map(item => `
                                 <div class="snap-center shrink-0 w-[85%] md:w-[320px] bg-white rounded-3xl shadow-md border border-gray-100 overflow-hidden">
                                     <div class="relative h-80 bg-gray-200">
                                         <img src="${item['이미지URL']}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/400x600?text=THE+HYUNDAI'">
-                                        <div class="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-lg text-xs font-black tracking-widest animate-pulse shadow-md">LIVE</div>
+                                        <div class="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-lg text-xs font-black tracking-widest shadow-md">LIVE</div>
                                     </div>
                                     <div class="p-6">
                                         <h3 class="text-xl font-bold mb-1 text-gray-900">${item['팝업이름'] || '이름 없음'}</h3>
@@ -77,22 +74,15 @@
                     app.appendChild(section);
                 });
 
-                if(!hasData) {
-                    msg.innerText = "데이터가 비어있습니다. 엑셀에 데이터가 있는지 확인해주세요.";
-                    app.appendChild(msg);
-                } else {
-                    // 성공 시 초록색 점으로 변경
-                    dot.classList.replace('bg-red-500', 'bg-green-500');
-                    dot.classList.remove('animate-pulse');
-                }
-
-            } catch (e) {
-                console.error(e);
-                msg.innerHTML = "보안 차단 우회 실패.<br><br><span class='text-sm font-normal text-red-500'>원드라이브 보안이 너무 강력합니다.<br>이 경우 엑셀 내용을 <b>'구글 스프레드시트'</b>로 옮기시면 100% 해결됩니다.</span>";
+                // 성공 시 초록색 불 켜기
+                dot.classList.replace('bg-red-500', 'bg-green-500');
+                dot.classList.remove('animate-pulse');
+            },
+            error: function(err) {
+                msg.innerHTML = "데이터를 찾을 수 없습니다.<br>깃허브에 <b>data.csv</b> 파일이 정확히 올라갔는지 확인해 주세요.";
                 dot.classList.replace('animate-pulse', 'bg-red-500');
             }
-        }
-        loadData();
+        });
     </script>
 </body>
 </html>
