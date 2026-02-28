@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>지금, 더현대 서울</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         .hide-scroll::-webkit-scrollbar { display: none; }
         html { scroll-behavior: smooth; }
@@ -37,56 +36,76 @@
     </div>
 
     <script>
-        const app = document.getElementById('app');
-        const msg = document.getElementById('msg');
-        const dot = document.getElementById('status-dot');
+        // 에러가 나면 화면에 바로 띄워서 멈춤을 방지하는 안전장치
+        window.onerror = function(message) {
+            document.getElementById('msg').innerHTML = "시스템 에러: " + message;
+            document.getElementById('status-dot').classList.replace('animate-pulse', 'bg-red-500');
+        };
 
-        Papa.parse("data.csv", {
-            download: true,
-            header: true,
-            complete: function(results) {
-                const data = results.data;
-                // 모든 층의 배열을 미리 정의
+        async function init() {
+            const app = document.getElementById('app');
+            const msg = document.getElementById('msg');
+            const dot = document.getElementById('status-dot');
+
+            try {
+                // 1. 캐시(과거 기록) 무시하고 무조건 최신 data.csv 가져오기 (시간표시 난수 추가)
+                const res = await fetch('data.csv?t=' + new Date().getTime());
+                if (!res.ok) throw new Error("data.csv 파일을 찾을 수 없습니다.");
+                
+                let text = await res.text();
+                text = text.replace(/^\uFEFF/, ''); // 엑셀 깨짐 방지용 특수문자 제거
+                
+                // 2. 외부 도구 없이 데이터를 한 줄씩 쪼개서 직접 읽기
+                const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                if (lines.length < 2) throw new Error("데이터가 비어있습니다. 엑셀을 확인해주세요.");
+
+                const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+                
+                // 각 열이 몇 번째인지 자동으로 찾기
+                const col = {
+                    floor: headers.findIndex(h => h.includes('층')),
+                    space: headers.findIndex(h => h.includes('공간')),
+                    name: headers.findIndex(h => h.includes('이름') || h.includes('팝업')),
+                    start: headers.findIndex(h => h.includes('시작')),
+                    end: headers.findIndex(h => h.includes('종료')),
+                    img: headers.findIndex(h => h.includes('이미지'))
+                };
+
                 const allowedFloors = ["B2", "B1", "1F", "2F", "3F", "4F", "5F", "6F"];
                 const groupedData = {};
-                
                 allowedFloors.forEach(f => groupedData[f] = {});
                 let hasData = false;
 
                 const now = new Date();
                 now.setHours(0,0,0,0);
 
-                data.forEach(item => {
-                    const floor = String(item['층'] || '').trim().toUpperCase();
-                    const space = String(item['공간명'] || '팝업 공간').trim(); // 공간명 기준 분류
-                    
-                    if(!allowedFloors.includes(floor)) return; // 지정된 층이 아니면 패스
-
-                    const start = new Date(item['시작일']);
-                    const end = new Date(item['종료일']);
-                    
-                    let statusObj = { text: '진행중', color: 'bg-emerald-500', class: 'status-ongoing', opacity: '' };
-
-                    if (now > end) {
-                        statusObj = { text: '종료됨', color: 'bg-gray-400', class: 'status-past', opacity: 'opacity-50 grayscale' };
-                    } else if (now < start) {
-                        statusObj = { text: '오픈예정', color: 'bg-blue-500', class: 'status-upcoming', opacity: '' };
+                for (let i = 1; i < lines.length; i++) {
+                    // CSV 쉼표 정확하게 분리하기
+                    let cols = [];
+                    let inQuotes = false;
+                    let current = '';
+                    for (let char of lines[i]) {
+                        if (char === '"') inQuotes = !inQuotes;
+                        else if (char === ',' && !inQuotes) { cols.push(current); current = ''; }
+                        else current += char;
                     }
+                    cols.push(current);
+                    cols = cols.map(c => c.replace(/^"|"$/g, '').trim());
 
-                    item._start = start;
-                    item._status = statusObj;
+                    const floor = col.floor !== -1 && cols[col.floor] ? cols[col.floor].toUpperCase() : '';
+                    if (!allowedFloors.includes(floor)) continue;
+
+                    const space = col.space !== -1 && cols[col.space] ? cols[col.space] : '팝업 공간';
+                    const title = col.name !== -1 && cols[col.name] ? cols[col.name] : '이름 없음';
+                    const img = col.img !== -1 && cols[col.img] ? cols[col.img] : '';
                     
-                    // 층 안에 공간별로 배열을 생성해서 넣음
-                    if(!groupedData[floor][space]) groupedData[floor][space] = [];
-                    groupedData[floor][space].push(item);
-                    hasData = true;
-                });
+                    const startStr = col.start !== -1 && cols[col.start] ? cols[col.start] : '';
+                    const endStr = col.end !== -1 && cols[col.end] ? cols[col.end] : '';
 
-                if(!hasData) {
-                    msg.innerText = "데이터가 없습니다. data.csv 파일 내용을 확인해주세요.";
-                    return;
-                }
+                    const startDate = startStr ? new Date(startStr) : new Date();
+                    const endDate = endStr ? new Date(endStr) : new Date();
 
-                app.innerHTML = '';
-                
-                allowedFloors.forEach(
+                    let statusObj = { text: '진행중', color: 'bg-emerald-500', class: 'status-ongoing', opacity: '' };
+                    if (now > endDate) {
+                        statusObj = { text: '종료됨', color: 'bg-gray-400', class: 'status-past', opacity: 'opacity-50 grayscale' };
+                    } else if
